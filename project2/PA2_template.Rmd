@@ -1,0 +1,202 @@
+---
+title: 'Insights : Economic and health consequences of weather events'
+author: "Shriram Gajjar"
+date: '`r Sys.Date()`'
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: readable
+    toc: yes
+    toc_depth: 2
+---
+
+```{r global_options, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(fig.width=8, fig.height=4, dpi=300)
+## numbers >= 10^5 will be denoted in scientific notation,
+## and rounded to 2 digits
+options(scipen = 1, digits = 2)
+library(corrplot);library(MASS);library(knitr);library(reshape2);library(ggplot2)
+library(dplyr);library(gridExtra)
+```
+
+# Synopsis
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+In this report we will analyse the NOAA Storm Events data. The raw data start from year 1950 to November 2011, with 902297 records. The data is composed by 37 variables, 7 of which seemed relevent to the analysis. Data will be processed, re-orderd and analysed in order to find answers for the following:
+
++ Across the United States, which types of events are most harmful with respect to population health?
+
+
++ Across the United States, which types of events have the greatest economic consequences?
+Data will rapresented in tabular and graphical means.
+
+
+# Data
+
+Dataset: [Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+
+There is also some documentation of the database available.
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+# Loading and preprocessing the data
+
+```{r,cache = TRUE}
+# Read data
+data <- read.csv(bzfile("repdata-data-StormData.csv.bz2"))
+
+#structure of data
+str(data)
+
+# subset event type from data
+event.type <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", 
+           "CROPDMGEXP")
+data.event <- data[event.type]
+
+```
+
+# Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+## The events causing most injuries
+
+```{r}
+data.injuries <- aggregate(data.event$INJURIES, by = list(EVTYPE = data.event$EVTYPE), sum)
+#head(data.injuries)
+data.injuries <- data.injuries[order(data.injuries$x, decreasing = TRUE), ]
+
+#plot
+p1 <- ggplot(data.injuries[1:10, ], aes(factor(EVTYPE), y = x)) + 
+    geom_bar(aes(fill=EVTYPE),stat = "identity") + 
+    theme_bw() + 
+    xlab("Event Type") +
+    ylab("Injuries caused") + 
+    ggtitle("Top 10 causes of injuries") +
+    theme(axis.text.x = element_blank())
+  
+
+```
+
+## The events causing most deaths
+
+```{r}
+data.death <- aggregate(data.event$FATALITIES, by = list(EVTYPE = data.event$EVTYPE), sum)
+#head(data.death)
+data.death <- data.death[order(data.death$x, decreasing = TRUE), ]
+
+#plot
+p2 <- ggplot(data.death[1:10, ], aes(factor(EVTYPE), y = x)) + 
+    geom_bar(aes(fill=EVTYPE),stat = "identity") + 
+    theme_bw() + 
+    xlab("Event Type") +
+    ylab("Fatalities caused") + 
+    ggtitle("Top 10 causes of fatalities") +
+    theme(axis.text.x = element_blank())
+ 
+
+```
+
+# Across the United States, which types of events have the greatest economic consequences?
+
+```{r}
+#Change PROPDMGEXP  magnitude to numeric representation
+data.event$PROPDMGEXP <- as.character(data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- gsub("\\-|\\+|\\?|0","1", data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- gsub("h|H","100", data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- gsub("k|K","1000", data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- gsub("m|M","1000000", data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- gsub("b|B","1000000000", data.event$PROPDMGEXP)
+data.event$PROPDMGEXP <- as.numeric(data.event$PROPDMGEXP)
+data.event$PROPDMGEXP[is.na(data.event$PROPDMGEXP)] <- 0
+
+#Change CROPDMGEXP  magnitude to numeric representation 
+data.event$CROPDMGEXP <- as.character(data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- gsub("\\-|\\+|\\?|0","1", data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- gsub("h|H","100", data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- gsub("k|K","1000", data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- gsub("m|M","1000000", data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- gsub("b|B","1000000000", data.event$CROPDMGEXP)
+data.event$CROPDMGEXP <- as.numeric(data.event$CROPDMGEXP)
+data.event$CROPDMGEXP[is.na(data.event$CROPDMGEXP)] <- 0
+```
+## Overall Economic damage ($)
+
+```{r}
+econ <- group_by(data.event, EVTYPE) %>% 
+    summarize(econ = sum(PROPDMG * PROPDMGEXP + CROPDMG * CROPDMGEXP)) %>% 
+    top_n(10) 
+econ <- econ[order(econ$econ, decreasing = TRUE), ]
+
+head(econ)
+
+#plot
+p3 <- ggplot(econ, aes(factor(EVTYPE), y = econ/10^9)) + 
+    geom_bar(aes(fill=EVTYPE),stat = "identity") + 
+    theme_bw() + 
+    xlab("Event Type") +
+    ylab(expression("Economic damage("~10^{9}~"$)")) + 
+    ggtitle("Overall - Top 10 events that have the greatest economic consequences") +
+    theme(axis.text.x = element_blank())
+``` 
+## Property damage ($)
+
+```{r}
+damage.prop <- aggregate(PROPDMG ~ EVTYPE, data = data.event, FUN = sum)
+damage.prop <- damage.prop[order(damage.prop$PROPDMG, decreasing = TRUE), ]
+
+p4 <- ggplot(damage.prop[1:10,],  
+             aes(x=reorder(EVTYPE, PROPDMG), y=PROPDMG/10^6, fill=factor(EVTYPE))) + 
+    geom_bar(aes(fill=EVTYPE),stat = "identity") + 
+    theme_bw() + 
+    xlab("Event Type") +
+    ylab(expression("Economic damage("~10^{6}~"$)")) + 
+    ggtitle("Top 10 events that have the greatest Property damage") +
+    theme(axis.text.x = element_blank())
+```
+
+## Crop damage ($)
+
+```{r}
+damage.crop <- aggregate(CROPDMG ~ EVTYPE, data = data.event, FUN = sum)
+damage.crop <- damage.crop[order(damage.crop$CROPDMG, decreasing = TRUE), ]
+
+p5 <- ggplot(damage.crop[1:10,],  
+             aes(x=reorder(EVTYPE, CROPDMG), y=CROPDMG/10^5, fill=factor(EVTYPE))) + 
+    geom_bar(aes(fill=EVTYPE),stat = "identity") + 
+    theme_bw() + 
+    xlab("Event Type") +
+    ylab(expression("Economic damage("~10^{5}~"$)")) + 
+    ggtitle("Top 10 events that have the greatest Crop damage") +
+    theme(axis.text.x = element_blank())
+```
+
+# Results
+
+As shown in the figures below:
+
+1. Tornados cause the most injuries.
+
+
+2. Tornados cause the most fatalities.
+
+
+3. Flooding causes the most economic damage($).
+
+
+4. Tornado causes the most property damage($).
+
+
+5. Hail causes the most crop damage($).
+
+
+```{r}
+print(p1)
+print(p2)
+print(p3) 
+#grid.arrange(p4, p5, nrow = 2) 
+```
+*It was not clear to me whether the greatest economic loss required is in terms of 
+crop, property or overall. The report must have at most 3 plots. *Thus, I did create multiple figures but did not plot.*
